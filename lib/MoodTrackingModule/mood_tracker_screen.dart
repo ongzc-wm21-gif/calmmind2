@@ -21,7 +21,7 @@ class MoodTrackerScreen extends StatefulWidget {
 
 class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
   List<Mood> _moods = [];
-  double _progress = 0.4; // Initial progress
+  double _progress = 0.0; // Initial progress changed from 0.4 to 0.0
   List<DailyRecord> _records = [];
   bool _isLoading = true;
   String? _selectedMoodEmoji; // Track selected mood emoji for today
@@ -283,4 +283,3 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     );
   }
 }
-
