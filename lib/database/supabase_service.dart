@@ -337,11 +337,97 @@ class SupabaseService {
     }
   }
 
-  Future<List<Mood>> getMoods() async {
+  /// Get today's mood for the current user
+  Future<Mood?> getTodayMood() async {
     try {
+      final uid = currentUserId;
+      if (uid == null) return null;
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = todayStart.add(const Duration(days: 1));
+
       final response = await client
           .from('moods')
           .select()
+          .eq('auth_uid', uid)
+          .gte('timestamp', todayStart.toIso8601String())
+          .lt('timestamp', todayEnd.toIso8601String())
+          .order('timestamp', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (response == null) return null;
+
+      return Mood(
+        name: response['name'] as String,
+        emoji: response['emoji'] as String,
+        timestamp: DateTime.parse(response['timestamp'] as String),
+      );
+    } catch (e) {
+      print('Error getting today mood: $e');
+      return null;
+    }
+  }
+
+  /// Upsert mood - update if exists today, otherwise insert
+  Future<void> upsertMood(Mood mood) async {
+    try {
+      final uid = currentUserId;
+      if (uid == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = todayStart.add(const Duration(days: 1));
+
+      // Check if mood exists for today
+      final existingMood = await client
+          .from('moods')
+          .select()
+          .eq('auth_uid', uid)
+          .gte('timestamp', todayStart.toIso8601String())
+          .lt('timestamp', todayEnd.toIso8601String())
+          .order('timestamp', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (existingMood != null) {
+        // Update existing mood (delete old and insert new, or update if there's an update method)
+        // Since moods table might not have an update method, we'll delete the old one and insert new
+        await client
+            .from('moods')
+            .delete()
+            .eq('auth_uid', uid)
+            .gte('timestamp', todayStart.toIso8601String())
+            .lt('timestamp', todayEnd.toIso8601String());
+      }
+
+      // Insert the new mood
+      await client.from('moods').insert({
+        'auth_uid': uid,
+        'name': mood.name,
+        'emoji': mood.emoji,
+        'timestamp': mood.timestamp.toIso8601String(),
+      });
+
+      print('Upserted mood: ${mood.emoji} - ${mood.name}');
+    } catch (e) {
+      print('Error upserting mood: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Mood>> getMoods() async {
+    try {
+      final uid = currentUserId;
+      if (uid == null) return [];
+
+      final response = await client
+          .from('moods')
+          .select()
+          .eq('auth_uid', uid)
           .order('timestamp', ascending: false);
 
       return (response as List).map((map) {
@@ -416,28 +502,87 @@ class SupabaseService {
   // ================= DAILY RECORDS =================
   Future<void> upsertDailyRecord(DailyRecord record) async {
     try {
+      final uid = currentUserId;
+      if (uid == null) {
+        throw Exception('User not authenticated');
+      }
+      
       final dateKey = DateFormat('yyyy-MM-dd').format(record.date);
-      await client.from('daily_records').upsert({
-        'auth_uid': currentUserId, // RLS will verify this
-        'date': dateKey,
-        'stressLevel': record.stressLevel,
-        'sleepQuality': record.sleepQuality,
-        'energyLevel': record.energyLevel,
-      });
+      
+      // Check if record exists first
+      final existingRecord = await client
+          .from('daily_records')
+          .select()
+          .eq('auth_uid', uid)
+          .eq('date', dateKey)
+          .maybeSingle();
+      
+      if (existingRecord != null) {
+        // Record exists, update it
+        final updateData = {
+          'stressLevel': record.stressLevel,
+          'sleepQuality': record.sleepQuality,
+          'energyLevel': record.energyLevel,
+        };
+        
+        print('Updating daily record for date: $dateKey');
+        print('Update data: $updateData');
+        
+        final updateResponse = await client
+            .from('daily_records')
+            .update(updateData)
+            .eq('auth_uid', uid)
+            .eq('date', dateKey)
+            .select();
+        
+        if (updateResponse.isEmpty) {
+          throw Exception('Update failed: No rows affected');
+        }
+        
+        print('Successfully updated daily record: ${updateResponse.first}');
+      } else {
+        // Record doesn't exist, insert it
+        final insertData = {
+          'auth_uid': uid,
+          'date': dateKey,
+          'stressLevel': record.stressLevel,
+          'sleepQuality': record.sleepQuality,
+          'energyLevel': record.energyLevel,
+        };
+        
+        print('Inserting new daily record for date: $dateKey');
+        print('Insert data: $insertData');
+        
+        final insertResponse = await client.from('daily_records').insert(insertData).select();
+        
+        if (insertResponse.isEmpty) {
+          throw Exception('Insert failed: No rows returned');
+        }
+        
+        print('Successfully inserted daily record: ${insertResponse.first}');
+      }
     } catch (e) {
       print('Error upserting daily record: $e');
+      print('Error type: ${e.runtimeType}');
       rethrow;
     }
   }
 
   Future<List<DailyRecord>> getDailyRecords() async {
     try {
+      final uid = currentUserId;
+      if (uid == null) {
+        print('No authenticated user, returning empty daily records');
+        return [];
+      }
+
       final response = await client
           .from('daily_records')
           .select()
+          .eq('auth_uid', uid)
           .order('date', ascending: true);
 
-      return (response as List).map((map) {
+      final records = (response as List).map((map) {
         return DailyRecord(
           date: DateTime.parse(map['date'] as String),
           stressLevel: (map['stressLevel'] as num).toDouble(),
@@ -445,6 +590,12 @@ class SupabaseService {
           energyLevel: map['energyLevel'] as int,
         );
       }).toList();
+      
+      print('Loaded ${records.length} daily records for user $uid');
+      if (records.isNotEmpty) {
+        print('Latest record: date=${DateFormat('yyyy-MM-dd').format(records.last.date)}, stress=${records.last.stressLevel}, sleep=${records.last.sleepQuality}, energy=${records.last.energyLevel}');
+      }
+      return records;
     } catch (e) {
       print('Error getting daily records: $e');
       return [];

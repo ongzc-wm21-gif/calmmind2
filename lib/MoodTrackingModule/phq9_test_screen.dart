@@ -16,25 +16,43 @@ class PHQ9TestScreen extends StatefulWidget {
 class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
   bool _showResult = false;
   List<PHQ9Result> _results = [];
+  late List<PHQ9Question> _questions;
 
-  final List<PHQ9Question> _questions = [
-    PHQ9Question(questionText: 'Little interest or pleasure in doing things'),
-    PHQ9Question(questionText: 'Feeling down, depressed, or hopeless'),
-    PHQ9Question(questionText: 'Trouble falling or staying asleep, or sleeping too much'),
-    PHQ9Question(questionText: 'Feeling tired or having little energy'),
-    PHQ9Question(questionText: 'Poor appetite or overeating'),
-    PHQ9Question(
-        questionText:
-            'Feeling bad about yourself - or that you are a failure or have let yourself or your family down'),
-    PHQ9Question(questionText: 'Trouble concentrating on things, such as reading the newspaper or watching television'),
-    PHQ9Question(
-        questionText:
-            'Moving or speaking so slowly that other people could have noticed. Or the opposite - being so fidgety or restless that you have been moving around a lot more than usual'),
-    PHQ9Question(questionText: 'Thoughts that you would be better off dead, or of hurting yourself'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Initialize questions with no selections (all scores are null by default)
+    _questions = [
+      PHQ9Question(questionText: 'Little interest or pleasure in doing things'),
+      PHQ9Question(questionText: 'Feeling down, depressed, or hopeless'),
+      PHQ9Question(questionText: 'Trouble falling or staying asleep, or sleeping too much'),
+      PHQ9Question(questionText: 'Feeling tired or having little energy'),
+      PHQ9Question(questionText: 'Poor appetite or overeating'),
+      PHQ9Question(
+          questionText:
+              'Feeling bad about yourself - or that you are a failure or have let yourself or your family down'),
+      PHQ9Question(questionText: 'Trouble concentrating on things, such as reading the newspaper or watching television'),
+      PHQ9Question(
+          questionText:
+              'Moving or speaking so slowly that other people could have noticed. Or the opposite - being so fidgety or restless that you have been moving around a lot more than usual'),
+      PHQ9Question(questionText: 'Thoughts that you would be better off dead, or of hurting yourself'),
+    ];
+  }
 
   Future<void> _submitTest() async {
-    final totalScore = _questions.fold(0, (sum, item) => sum + item.score);
+    // Check if all questions are answered
+    final unansweredQuestions = _questions.where((q) => q.score == null).toList();
+    if (unansweredQuestions.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please answer all questions before submitting.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final totalScore = _questions.fold(0, (sum, item) => sum + (item.score ?? 0));
     final result = PHQ9Result(date: DateTime.now(), score: totalScore);
     await SupabaseService.instance.insertPHQ9Result(result);
 
@@ -97,17 +115,33 @@ class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
       final lat = position.latitude;
       final lon = position.longitude;
 
-      final Uri googleMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=counselors&location=$lat,$lon');
+      // Use Google Maps URL format for searching nearby counselors
+      final Uri googleMapsUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=counselors+near+me&location=$lat,$lon');
 
-      if (await canLaunchUrl(googleMapsUrl)) {
-        await launchUrl(googleMapsUrl);
-      } else {
-        throw 'Could not launch $googleMapsUrl';
+      // Try to launch URL - use externalApplication mode to open in browser or Maps app
+      final launched = await launchUrl(
+        googleMapsUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Google Maps. Please check if Google Maps is installed.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
     } catch (e) {
+      print('Error finding nearby counselors: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not find nearby counselors: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not find nearby counselors: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }
@@ -170,9 +204,11 @@ class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
                         value: 0,
                         groupValue: question.score,
                         onChanged: (value) {
-                          setState(() {
-                            question.score = value!;
-                          });
+                          if (value != null) {
+                            setState(() {
+                              question.score = value;
+                            });
+                          }
                         },
                       ),
                       RadioListTile<int>(
@@ -180,9 +216,11 @@ class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
                         value: 1,
                         groupValue: question.score,
                         onChanged: (value) {
-                          setState(() {
-                            question.score = value!;
-                          });
+                          if (value != null) {
+                            setState(() {
+                              question.score = value;
+                            });
+                          }
                         },
                       ),
                       RadioListTile<int>(
@@ -190,9 +228,11 @@ class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
                         value: 2,
                         groupValue: question.score,
                         onChanged: (value) {
-                          setState(() {
-                            question.score = value!;
-                          });
+                          if (value != null) {
+                            setState(() {
+                              question.score = value;
+                            });
+                          }
                         },
                       ),
                       RadioListTile<int>(
@@ -200,9 +240,11 @@ class _PHQ9TestScreenState extends State<PHQ9TestScreen> {
                         value: 3,
                         groupValue: question.score,
                         onChanged: (value) {
-                          setState(() {
-                            question.score = value!;
-                          });
+                          if (value != null) {
+                            setState(() {
+                              question.score = value;
+                            });
+                          }
                         },
                       ),
                     ],

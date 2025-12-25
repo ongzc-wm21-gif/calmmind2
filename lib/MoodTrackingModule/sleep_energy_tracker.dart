@@ -11,8 +11,8 @@ class SleepEnergyTracker extends StatefulWidget {
 }
 
 class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
-  int _sleepQuality = 1;
-  int _energyLevel = 2;
+  int? _sleepQuality; // No default selection
+  int? _energyLevel; // No default selection
 
   @override
   Widget build(BuildContext context) {
@@ -42,10 +42,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('😴 Poor'),
                   selected: _sleepQuality == 0,
                   onSelected: (selected) {
+                    setState(() {
+                      _sleepQuality = selected ? 0 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _sleepQuality = 0;
-                      });
                       widget.onSleepChanged(0);
                     }
                   },
@@ -54,10 +54,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('😊 OK'),
                   selected: _sleepQuality == 1,
                   onSelected: (selected) {
+                    setState(() {
+                      _sleepQuality = selected ? 1 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _sleepQuality = 1;
-                      });
                       widget.onSleepChanged(1);
                     }
                   },
@@ -66,10 +66,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('😁 Good'),
                   selected: _sleepQuality == 2,
                   onSelected: (selected) {
+                    setState(() {
+                      _sleepQuality = selected ? 2 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _sleepQuality = 2;
-                      });
                       widget.onSleepChanged(2);
                     }
                   },
@@ -86,10 +86,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('🔋 Low'),
                   selected: _energyLevel == 0,
                   onSelected: (selected) {
+                    setState(() {
+                      _energyLevel = selected ? 0 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _energyLevel = 0;
-                      });
                       widget.onEnergyChanged(0);
                     }
                   },
@@ -98,10 +98,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('⚡️ Medium'),
                   selected: _energyLevel == 1,
                   onSelected: (selected) {
+                    setState(() {
+                      _energyLevel = selected ? 1 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _energyLevel = 1;
-                      });
                       widget.onEnergyChanged(1);
                     }
                   },
@@ -110,10 +110,10 @@ class _SleepEnergyTrackerState extends State<SleepEnergyTracker> {
                   label: const Text('✨ High'),
                   selected: _energyLevel == 2,
                   onSelected: (selected) {
+                    setState(() {
+                      _energyLevel = selected ? 2 : null;
+                    });
                     if (selected) {
-                      setState(() {
-                        _energyLevel = 2;
-                      });
                       widget.onEnergyChanged(2);
                     }
                   },

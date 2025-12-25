@@ -30,7 +30,10 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   late Animation<double> _animation;
   String _text = 'Start';
   bool _isAnimating = false;
+  bool _isPaused = false;
   Timer? _countdownTimer;
+  Timer? _holdAfterInhaleTimer;
+  Timer? _holdAfterExhaleTimer;
   int _remainingTime = 0;
   int _selectedDuration = 60;
 
@@ -38,7 +41,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     BreathingPattern(name: 'Box Breathing', inhale: 4, holdAfterInhale: 4, exhale: 4, holdAfterExhale: 4),
     BreathingPattern(name: 'Deep Calm', inhale: 4, holdAfterInhale: 0, exhale: 6, holdAfterExhale: 0),
     BreathingPattern(name: 'Energizing', inhale: 3, holdAfterInhale: 0, exhale: 3, holdAfterExhale: 0),
-    BreathingPattern(name: 'Stress Relief', inhale: 4, holdAfterInhale: 4, exhale: 8, holdAfterExhale: 0),
+    BreathingPattern(name: 'Stress Relief', inhale: 4, holdAfterInhale: 7, exhale: 8, holdAfterExhale: 0),
   ];
 
   late BreathingPattern _selectedPattern;
@@ -62,7 +65,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
           setState(() {
             _text = 'Hold';
           });
-          Timer(Duration(seconds: _selectedPattern.holdAfterInhale), () {
+          _holdAfterInhaleTimer = Timer(Duration(seconds: _selectedPattern.holdAfterInhale), () {
             if (mounted && _isAnimating) {
               setState(() {
                 _text = 'Exhale';
@@ -77,7 +80,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
               _text = 'Hold';
             });
           }
-          Timer(Duration(seconds: _selectedPattern.holdAfterExhale), () {
+          _holdAfterExhaleTimer = Timer(Duration(seconds: _selectedPattern.holdAfterExhale), () {
             if (mounted && _isAnimating) {
               setState(() {
                 _text = 'Inhale';
@@ -94,6 +97,7 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     if (mounted) {
       setState(() {
         _isAnimating = true;
+        _isPaused = false;
         _text = 'Inhale';
         _controller.duration = Duration(seconds: _selectedPattern.inhale);
         _remainingTime = _selectedDuration;
@@ -105,20 +109,82 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
             _remainingTime--;
           });
         } else {
-          _stopAnimation();
+          _resetAnimation();
         }
       });
     }
   }
 
-  void _stopAnimation() {
-    if (mounted) {
+  void _pauseAnimation() {
+    if (mounted && _isAnimating && !_isPaused) {
       _controller.stop();
       _countdownTimer?.cancel();
+      _holdAfterInhaleTimer?.cancel();
+      _holdAfterExhaleTimer?.cancel();
+      setState(() {
+        _isPaused = true;
+      });
+    }
+  }
+
+  void _resumeAnimation() {
+    if (mounted && _isAnimating && _isPaused) {
+      setState(() {
+        _isPaused = false;
+      });
+
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_remainingTime > 0) {
+          setState(() {
+            _remainingTime--;
+          });
+        } else {
+          _resetAnimation();
+        }
+      });
+
+      if (_text == 'Inhale') {
+        _controller.forward();
+      } else if (_text == 'Exhale') {
+        _controller.reverse();
+      } else if (_text == 'Hold') {
+        if (_controller.status == AnimationStatus.completed) {
+          _holdAfterInhaleTimer = Timer(Duration(seconds: _selectedPattern.holdAfterInhale), () {
+            if (mounted && _isAnimating) {
+              setState(() {
+                _text = 'Exhale';
+                _controller.duration = Duration(seconds: _selectedPattern.exhale);
+              });
+              _controller.reverse();
+            }
+          });
+        } else {
+          _holdAfterExhaleTimer = Timer(Duration(seconds: _selectedPattern.holdAfterExhale), () {
+            if (mounted && _isAnimating) {
+              setState(() {
+                _text = 'Inhale';
+                _controller.duration = Duration(seconds: _selectedPattern.inhale);
+              });
+              _controller.forward();
+            }
+          });
+        }
+      }
+    }
+  }
+
+  void _resetAnimation() {
+    if (mounted) {
+      _controller.stop();
+      _controller.reset();
+      _countdownTimer?.cancel();
+      _holdAfterInhaleTimer?.cancel();
+      _holdAfterExhaleTimer?.cancel();
       setState(() {
         _isAnimating = false;
+        _isPaused = false;
         _text = 'Start';
-        _remainingTime = 0;
+        _remainingTime = _selectedDuration;
       });
     }
   }
@@ -143,6 +209,8 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
   void dispose() {
     _controller.dispose();
     _countdownTimer?.cancel();
+    _holdAfterInhaleTimer?.cancel();
+    _holdAfterExhaleTimer?.cancel();
     super.dispose();
   }
 
@@ -226,18 +294,48 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
                   _buildDurationChip(300, '5 Min'),
                 ],
               ),
-            ElevatedButton(
-              onPressed: _isAnimating ? _stopAnimation : _startAnimation,
-              style: ElevatedButton.styleFrom(
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              ),
-              child: Text(_isAnimating ? 'Stop' : 'Start', style: const TextStyle(fontSize: 20)),
-            ),
+            _buildMainButtons(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildMainButtons() {
+    if (!_isAnimating) {
+      return ElevatedButton(
+        onPressed: _startAnimation,
+        style: ElevatedButton.styleFrom(
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+        ),
+        child: const Text('Start', style: TextStyle(fontSize: 20)),
+      );
+    } else {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ElevatedButton(
+            onPressed: _isPaused ? _resumeAnimation : _pauseAnimation,
+            style: ElevatedButton.styleFrom(
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+            ),
+            child: Text(_isPaused ? 'Resume' : 'Pause', style: const TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 20),
+          ElevatedButton(
+            onPressed: _resetAnimation,
+            style: ElevatedButton.styleFrom(
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+              backgroundColor: Colors.redAccent,
+            ),
+            child: const Text('Reset', style: TextStyle(fontSize: 20, color: Colors.white)),
+          ),
+        ],
+      );
+    }
   }
 
   Widget _buildBreathingButton(BreathingPattern pattern) {
@@ -267,4 +365,3 @@ class _BreathingExerciseScreenState extends State<BreathingExerciseScreen>
     );
   }
 }
-

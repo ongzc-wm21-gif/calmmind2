@@ -9,6 +9,12 @@ class OverviewChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('OverviewChart: Building with ${records.length} records');
+    if (records.isNotEmpty) {
+      print('OverviewChart: First record - stress: ${records.first.stressLevel}, sleep: ${records.first.sleepQuality}, energy: ${records.first.energyLevel}');
+      print('OverviewChart: Stress spots: ${records.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.stressLevel.toDouble())).toList()}');
+    }
+    
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -25,9 +31,44 @@ class OverviewChart extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              height: 200,
-              child: LineChart(
+            records.isEmpty
+                ? const SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Text(
+                        'No data available yet.\nStart tracking your stress, sleep, and energy levels!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                : records.length == 1
+                    ? SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Data for ${DateFormat('MMM dd, yyyy').format(records.first.date)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _DataPointWidget(label: 'Stress', value: records.first.stressLevel, color: Colors.red),
+                                  _DataPointWidget(label: 'Sleep', value: records.first.sleepQuality * 5.0, color: Colors.blue),
+                                  _DataPointWidget(label: 'Energy', value: records.first.energyLevel * 5.0, color: Colors.green),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : SizedBox(
+                        height: 200,
+                        child: LineChart(
                 LineChartData(
                   lineBarsData: [
                     // Stress line
@@ -123,9 +164,12 @@ class OverviewChart extends StatelessWidget {
                   borderData: FlBorderData(show: true),
                   minY: 0,
                   maxY: 10,
+                  minX: 0,
+                  maxX: records.isEmpty ? 1 : (records.length - 1).toDouble(),
+                  baselineY: 0,
                 ),
-              ),
-            ),
+                    ),
+                  ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -155,6 +199,50 @@ class _LegendItem extends StatelessWidget {
         Container(width: 12, height: 12, color: color),
         const SizedBox(width: 4),
         Text(label),
+      ],
+    );
+  }
+}
+
+class _DataPointWidget extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color color;
+
+  const _DataPointWidget({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 2),
+          ),
+          child: Center(
+            child: Text(
+              value.toStringAsFixed(1),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10),
+        ),
       ],
     );
   }

@@ -24,11 +24,26 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
   double _progress = 0.4; // Initial progress
   List<DailyRecord> _records = [];
   bool _isLoading = true;
+  String? _selectedMoodEmoji; // Track selected mood emoji for today
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadTodayMood();
+  }
+
+  Future<void> _loadTodayMood() async {
+    try {
+      final todayMood = await SupabaseService.instance.getTodayMood();
+      if (mounted && todayMood != null) {
+        setState(() {
+          _selectedMoodEmoji = todayMood.emoji;
+        });
+      }
+    } catch (e) {
+      print('Error loading today mood: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -40,16 +55,57 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     final moods = await dbHelper.getMoods();
     final records = await dbHelper.getDailyRecords();
     
+    print('_loadData: Loaded ${records.length} daily records');
+    if (records.isNotEmpty) {
+      print('_loadData: First record - date: ${records.first.date}, stress: ${records.first.stressLevel}, sleep: ${records.first.sleepQuality}, energy: ${records.first.energyLevel}');
+      print('_loadData: Last record - date: ${records.last.date}, stress: ${records.last.stressLevel}, sleep: ${records.last.sleepQuality}, energy: ${records.last.energyLevel}');
+    }
+    
     setState(() {
       _moods = moods;
       _records = records;
       _isLoading = false;
     });
+    
+    print('_loadData: State updated with ${_records.length} records');
   }
 
   Future<void> _onMoodSelected(Mood mood) async {
-    await SupabaseService.instance.insertMood(mood);
-    _loadData();
+    try {
+      // Use upsert to update if mood exists for today, otherwise insert
+      await SupabaseService.instance.upsertMood(mood);
+      
+      // Update selected mood emoji
+      setState(() {
+        _selectedMoodEmoji = mood.emoji;
+      });
+      
+      // Reload data
+      await _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_selectedMoodEmoji == mood.emoji && _moods.isNotEmpty && _moods.first.emoji == mood.emoji
+                ? 'Mood updated: ${mood.name}'
+                : 'Mood recorded: ${mood.name}'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error saving mood: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving mood: $e'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _onProgressChanged(double progress) {
@@ -63,31 +119,59 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     int? sleepQuality,
     int? energyLevel,
   }) async {
-    final today = DateTime.now();
-    final todayRecordIndex = _records.indexWhere((record) =>
-        record.date.year == today.year &&
-        record.date.month == today.month &&
-        record.date.day == today.day);
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day); // Normalize to midnight
+      final todayRecordIndex = _records.indexWhere((record) =>
+          record.date.year == today.year &&
+          record.date.month == today.month &&
+          record.date.day == today.day);
 
-    DailyRecord record;
-    if (todayRecordIndex != -1) {
-      final oldRecord = _records[todayRecordIndex];
-      record = DailyRecord(
-        date: oldRecord.date,
-        stressLevel: stressLevel ?? oldRecord.stressLevel,
-        sleepQuality: sleepQuality ?? oldRecord.sleepQuality,
-        energyLevel: energyLevel ?? oldRecord.energyLevel,
-      );
-    } else {
-      record = DailyRecord(
-        date: today,
-        stressLevel: stressLevel ?? 5.0, // Default value
-        sleepQuality: sleepQuality ?? 1, // Default value
-        energyLevel: energyLevel ?? 1, // Default value
-      );
+      DailyRecord record;
+      if (todayRecordIndex != -1) {
+        final oldRecord = _records[todayRecordIndex];
+        record = DailyRecord(
+          date: oldRecord.date,
+          stressLevel: stressLevel ?? oldRecord.stressLevel,
+          sleepQuality: sleepQuality ?? oldRecord.sleepQuality,
+          energyLevel: energyLevel ?? oldRecord.energyLevel,
+        );
+        print('Updating existing record - stress: ${record.stressLevel}, sleep: ${record.sleepQuality}, energy: ${record.energyLevel}');
+      } else {
+        record = DailyRecord(
+          date: today,
+          stressLevel: stressLevel ?? 5.0, // Default value
+          sleepQuality: sleepQuality ?? 1, // Default value
+          energyLevel: energyLevel ?? 1, // Default value
+        );
+        print('Creating new record - stress: ${record.stressLevel}, sleep: ${record.sleepQuality}, energy: ${record.energyLevel}');
+      }
+      await SupabaseService.instance.upsertDailyRecord(record);
+      
+      // Reload data to update the graph
+      await _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Daily record updated successfully'),
+            duration: Duration(seconds: 1),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error updating daily record: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating record: $e'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-    await SupabaseService.instance.upsertDailyRecord(record);
-    _loadData();
   }
 
   @override
@@ -131,7 +215,10 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            QuickMoodCheck(onMoodSelected: _onMoodSelected),
+                            QuickMoodCheck(
+                              onMoodSelected: _onMoodSelected,
+                              selectedEmoji: _selectedMoodEmoji,
+                            ),
                             const SizedBox(height: 16),
                             Timeline(moods: _moods),
                             const SizedBox(height: 16),

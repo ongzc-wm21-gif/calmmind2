@@ -1,8 +1,8 @@
 class PHQ9Question {
   final String questionText;
-  int score;
+  int? score; // Nullable to indicate no selection
 
-  PHQ9Question({required this.questionText, this.score = 0});
+  PHQ9Question({required this.questionText, this.score}); // score is optional and nullable
 }
 
 class PHQ9Result {

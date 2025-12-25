@@ -47,6 +47,20 @@ class _HomePageState extends State<HomePage> {
     _loadNotificationCount();
     _setupNotificationListener();
     _loadNextReminder();
+    _loadTodayMood();
+  }
+
+  Future<void> _loadTodayMood() async {
+    try {
+      final todayMood = await _dbHelper.getTodayMood();
+      if (mounted && todayMood != null) {
+        setState(() {
+          _selectedMoodEmoji = todayMood.emoji;
+        });
+      }
+    } catch (e) {
+      print('Error loading today mood: $e');
+    }
   }
 
   Future<void> _loadNextReminder() async {
@@ -296,6 +310,12 @@ class _HomePageState extends State<HomePage> {
     return GestureDetector(
       onTap: () async {
         try {
+          // If clicking the same emoji, don't do anything (or you could deselect it)
+          if (isSelected) {
+            // Optionally allow deselecting by clicking again
+            // For now, we'll just update it again
+          }
+          
           // Create mood object
           final mood = Mood(
             emoji: emoji,
@@ -303,8 +323,8 @@ class _HomePageState extends State<HomePage> {
             timestamp: DateTime.now(),
           );
           
-          // Save to database
-          await _dbHelper.insertMood(mood);
+          // Upsert mood (update if exists today, otherwise insert)
+          await _dbHelper.upsertMood(mood);
           
           // Update selected mood
           setState(() {
@@ -315,7 +335,7 @@ class _HomePageState extends State<HomePage> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Mood recorded: $label'),
+                content: Text(isSelected ? 'Mood updated: $label' : 'Mood recorded: $label'),
                 duration: const Duration(seconds: 2),
                 backgroundColor: Colors.green,
               ),
